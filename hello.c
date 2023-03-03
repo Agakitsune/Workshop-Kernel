@@ -11,10 +11,12 @@ module_param(n, long, S_IRUSR);
 module_param(str, charp, S_IRUSR);
 
 int MAJOR = 0;
+int BISTRO_MAJOR = 0;
 
 int IS_OPEN = 0;
 
 static char *output = NULL;
+static char *bis = NULL;
 
 static struct file_operations op = {
     .open = my_dev_open,
@@ -23,21 +25,36 @@ static struct file_operations op = {
     .write = my_dev_write
 };
 
+static struct file_operations bis_op = {
+    .open = my_dev_open,
+    .release = my_dev_close,
+    .read = my_kbistro_read,
+    .write = my_kbistro_write
+};
+
 int __init my_init(void) {
     
 
     MAJOR = register_chrdev(0, "furr", &op);
+    BISTRO_MAJOR = register_chrdev(0, "bistro", &bis_op);
 
-    printk("%d\n", MAJOR);
+    printk("CLASSIC: %d\n", MAJOR);
+    printk("BISTRO: %d\n", BISTRO_MAJOR);
 
     // open("/dev/furr", O_RDWR);
     // open("/dev/furr", O_RDWR);
+
+    bis = kmalloc(256, GFP_KERNEL);
+    if (bis == NULL)
+        return -1;
+    bis[0] = '0';
 
     return 0;
 }
 
 void __exit my_exit(void) {
     unregister_chrdev(MAJOR, "furr");
+    unregister_chrdev(BISTRO_MAJOR, "bistro");
 
     printk("Goodbye!\n");
 }
@@ -94,6 +111,49 @@ ssize_t my_dev_write(struct file *file, const char *buf, size_t len, loff_t *off
     }
     printk("Output is: [%s]\n", output);
     return len - ui;
+}
+
+static ssize_t my_kbistro_read(struct file *file, char *buf, size_t len, loff_t *off) {
+    unsigned int ui = 0;
+     if (buf == NULL)
+        return -1;
+    if (bis == NULL) {
+        bis = kmalloc(len + 1, GFP_KERNEL);
+        if (bis == NULL)
+            return -1;
+        bis[0] = '0';
+    } else {
+        bis = krealloc(bis, len + 1, GFP_KERNEL);
+        if (bis == NULL)
+            return -1;
+    }
+    ui = copy_to_user(buf, bis, len);
+    // kfree(bis);
+    // bis = NULL;
+    return len - ui;
+}
+
+static ssize_t my_kbistro_write(struct  file *file, const char *buf, size_t len, loff_t *off) {
+    long store = 0;
+    long add = 0;
+    if (buf == NULL)
+        return -1;
+    if (bis == NULL) {
+        bis = kmalloc(256, GFP_KERNEL);
+        if (bis == NULL)
+            return -1;
+        bis[0] = '0';
+    }
+    //     bis = krealloc(bis, len + 2, GFP_KERNEL);
+    //     if (bis == NULL)
+    //         return -1;
+    // }
+    if (kstrtol(buf, 10, &add) == -1)
+        return -1;
+    if (kstrtol(bis, 10, &store) == -1)
+        return -1;
+    sprintf(bis, "%ld", store + add);
+    return len;
 }
 
 
